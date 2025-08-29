@@ -41,5 +41,8 @@
     "postcss": "^8.4.38",
     "eslint": "^8.57.0",
     "eslint-config-next": "14.1.4"
+  },
+  "resolutions": {
+    "lit": "3.3.0"
   }
 }
