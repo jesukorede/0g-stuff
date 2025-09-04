@@ -9,12 +9,12 @@ if (!projectId) throw new Error('Project ID is not defined')
 
 // Define 0G testnet chain
 const zgTestnet = {
-  id: 16600,
-  name: '0G Newton Testnet',
+  id: 16601,
+  name: '0G Galileo Testnet',
   nativeCurrency: {
     decimals: 18,
     name: '0G',
-    symbol: 'A0GI',
+    symbol: '0G',
   },
   rpcUrls: {
     default: {
@@ -24,7 +24,7 @@ const zgTestnet = {
   blockExplorers: {
     default: {
       name: '0G Explorer',
-      url: 'https://chainscan-newton.0g.ai',
+      url: 'https://chainscan-galileo.0g.ai',
     },
   },
   testnet: true,

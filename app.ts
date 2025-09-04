@@ -177,6 +177,7 @@ class ZGInferenceClient {
       this.providerAddress!,
       message
     );
+    console.log(headers)
 
     // Create OpenAI client to talk to the service
     const openai = new OpenAI({
@@ -364,23 +365,23 @@ const weatherTool: Tool = {
  * This example shows both simple AI chat and AI with weather tool usage
  */
 async function main() {
-  console.log("🚀 Starting ZG Inference Client Demo");
+  console.log("Starting ZG Inference Client Demo");
 
   try {
     // Create a new client instance with your private key from environment variables
     const client = new ZGInferenceClient(process.env.PRIVATE_KEY!);
 
     // Example 1: Simple AI conversation without any tools
-    console.log("\n💬 Example 1: Simple AI Conversation");
+    console.log("\n Example 1: Simple AI Conversation");
     const simpleResponse = await client.inference(
       "Tell me a short joke about programming.",
       undefined, // No tools provided
       "You are a helpful assistant with a sense of humor."
     );
-    console.log("🤖 AI Response:", simpleResponse.message);
+    console.log("AI Response:", simpleResponse.message);
 
     // Example 2: AI conversation with weather tool
-    console.log("\n🌤️ Example 2: AI with Weather Tool");
+    console.log("\n Example 2: AI with Weather Tool");
     const weatherResponse = await client.inference(
       "What's the weather like in Lagos, Nigeria?",
       [weatherTool], // Provide the weather tool

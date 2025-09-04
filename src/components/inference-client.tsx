@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAccount, useDisconnect } from 'wagmi'
 import { useWeb3Modal } from '@web3modal/wagmi/react'
 import { createZGComputeNetworkBroker } from '@0glabs/0g-serving-broker'
-import { BrowserProvider } from 'ethers'
+import { BrowserProvider, ethers } from 'ethers'
 import OpenAI from 'openai'
 import { LogEntry, InferenceService } from '@/types'
 import { Wallet, Brain, Trash2, Loader2 } from 'lucide-react'
@@ -26,7 +26,7 @@ export function InferenceClient() {
 
   const addLog = (message: string, type: LogEntry['type'] = 'info') => {
     const timestamp = new Date().toLocaleTimeString()
-    setLogs(prev => [...prev, { timestamp, message, type }])
+    setLogs((prev: LogEntry[]) => [...prev, { timestamp, message, type }])
     console.log(`[${type.toUpperCase()}] ${message}`)
   }
 
@@ -42,21 +42,55 @@ export function InferenceClient() {
       
       try {
         addLog('Initializing 0G Labs broker...', 'info')
-        const provider = new BrowserProvider(window.ethereum)
-        const signer = await provider.getSigner()
+        
+        // Create browser provider for wallet interaction - this is the key difference
+        const browserProvider = new BrowserProvider(window.ethereum)
+        
+        // Check current network that MetaMask is connected to
+        const network = await browserProvider.getNetwork()
+        addLog(`MetaMask network: ${network.name} (Chain ID: ${network.chainId})`, 'info')
+        
+        // Ensure we're on the correct network (0G testnet)
+        if (network.chainId !== BigInt(16601)) {
+          addLog('Warning: Not on 0G Newton Testnet (Chain ID: 16601)', 'error')
+          addLog('Please switch to 0G Newton Testnet in MetaMask', 'info')
+          // Don't return, let's try anyway
+        }
+        
+        // Create provider directly connected to 0G testnet for balance checking
+        const zgProvider = new ethers.JsonRpcProvider("https://evmrpc-testnet.0g.ai")
+        
+        // Get balance from the 0G network directly
+        const balance = await zgProvider.getBalance(address)
+        const balanceIn0G = Number(balance) / 1e18
+        addLog(`Wallet balance on 0G Network: ${balanceIn0G.toFixed(6)} 0G`, balanceIn0G > 0 ? 'success' : 'error')
+
+        // Also check balance on current MetaMask network for comparison
+        const mmBalance = await browserProvider.getBalance(address)
+        const mmBalanceInEth = Number(mmBalance) / 1e18
+        addLog(`MetaMask network balance: ${mmBalanceInEth.toFixed(6)} (current network)`, 'info')
+        
+        if (balanceIn0G === 0) {
+          addLog('Your wallet has no 0G tokens on 0G Network.', 'error')
+          addLog('Please ensure you have 0G tokens and MetaMask is on 0G Newton Testnet.', 'info')
+          return
+        }
+        
+        // CRITICAL: Use browserProvider directly for the signer instead of switching
+        // This ensures the signer is connected to the same network as MetaMask
+        const signer = await browserProvider.getSigner()
+        addLog(`Signer address: ${await signer.getAddress()}`, 'info')
+        addLog(`Signer provider chain ID: ${(await signer.provider.getNetwork()).chainId}`, 'info')
         
         const newBroker = await createZGComputeNetworkBroker(signer) as ActualZGBroker
         setBroker(newBroker)
         addLog('Broker initialized successfully', 'success')
         
-        // Get wallet balance
-        const balance = await provider.getBalance(address)
-        addLog(`Wallet balance: ${balance.toString()} wei`, 'info')
-        
         // Setup ledger
         await setupLedger(newBroker)
+        addLog('Ledger setup completed', 'success')
         
-        // Discover services
+        // Discover services 
         await discoverServices(newBroker)
         
       } catch (error) {
@@ -72,132 +106,262 @@ export function InferenceClient() {
       addLog('Setting up ledger account...', 'info')
       
       try {
-        const ledger = await broker.ledger.getLedger()
-        addLog(`Account exists. Balance: ${ledger.totalBalance || ledger}`, 'success')
+        // Try to get existing account balance 
+        const ledger = await broker.ledger//.getLedger()
+        addLog(`Account with ledger exists.`, 'info')
+
+        // Check balance 
+        //const account = await broker.ledger.getLedger()
+        addLog('Fetched existing ledger account', 'success')
+        //addLog(`Ledger details: ${JSON.stringify(account)}`, 'info')
+
         
-        // Add funds if balance is low
-        const balanceNum = Number(ledger.totalBalance || ledger)
-        if (balanceNum < 0.05) {
-          addLog('Adding funds to account...', 'info')
-          await broker.ledger.depositFund(0.1)
-          addLog('Funds added successfully', 'success')
-        }
+        //addLog(`Account exists. Balance: ${balance.toFixed(6)} OG, Available: ${available.toFixed(6)} OG`, 'success')
+        
+        // Add more funds if available balance is low (less than 0.05)
+        // if (available < 0.05) {
+        //   const amountToSend = "0.1" // Use string as per docs
+        //   addLog(`Adding funds to existing account: ${amountToSend} OG`, 'info')
+        //   try {
+        //     const depositRes = await broker.ledger.depositFund(amountToSend)
+        //     addLog('Funds added successfully', 'success')
+        //     console.log('✅ Deposit result:', depositRes)
+        //   } catch (depositError) {
+        //     addLog(`Deposit failed: ${depositError}`, 'error')
+        //     console.error('Deposit error details:', depositError)
+        //     throw depositError
+        //   }
+        // }
       } catch (error) {
-        addLog('Creating new ledger account...', 'info')
-        await broker.ledger.addLedger(0.1)
-        addLog('Ledger account created successfully', 'success')
+        // Account doesn't exist, so create a new one (using official API)
+        addLog('Account doesn\'t exist, creating new account...', 'info')
+        try {
+          const amountToSend = 0.1 
+          console.log('Attempting to create ledger with amount:', amountToSend)
+          const addRes = await broker.ledger.addLedger(amountToSend)
+          addLog('Account created successfully', 'success')
+          addLog(`Account creation result: ${JSON.stringify(addRes)}`, 'info')
+        } catch (error) {
+          const createError = error as Error;
+          addLog(`Error creating account: ${createError}`, 'error')
+          console.error('Account creation error details:', createError)
+          
+          // Check if it's a gas estimation error
+          if (createError.toString().includes('gas') || createError.toString().includes('insufficient')) {
+            addLog('💡 This might be a gas estimation issue. Try with a smaller amount.', 'info')
+            try {
+              addLog('Trying with smaller amount: 0.01 OG', 'info')
+              const smallerAmount = 0.01 
+              const retryRes = await broker.ledger.addLedger(smallerAmount)
+              addLog('Account created with smaller amount', 'success')
+              console.log('✅ Retry result:', retryRes)
+              return
+            } catch (retryError) {
+              addLog(`Retry also failed: ${retryError}`, 'error')
+            }
+          }
+          
+          throw createError
+        }
       }
     } catch (error) {
       addLog(`Ledger setup failed: ${error}`, 'error')
+      console.error('Full ledger setup error:', error)
+      // Don't throw error, let the app continue to service discovery
     }
   }
 
-  const discoverServices = async (broker: ActualZGBroker) => {
-    try {
-      addLog('Discovering AI services...', 'info')
-      const availableServices = await broker.inference.listService()
-      setServices(availableServices)
-      addLog(`Found ${availableServices.length} available services`, 'success')
+const discoverServices = async (broker: ActualZGBroker) => {
+  try {
+    addLog('Discovering AI services...', 'info')
+    const availableServices = await broker.inference.listService()
+    setServices(availableServices)
+    addLog(`Found ${availableServices.length} available services`, 'success')
+    
+    if (availableServices.length > 0) {
+      const serviceArray = availableServices[0]
       
-      if (availableServices.length > 0) {
-        const service = availableServices[0]
-        setCurrentService(service)
-        addLog(`Selected service provider: ${service.provider}`, 'info')
-        
-        // Acknowledge provider
-        try {
-          const isAcknowledged = await broker.inference.userAcknowledged(service.provider)
-          if (!isAcknowledged) {
-            addLog('Acknowledging service provider...', 'info')
-            await broker.inference.acknowledgeProviderSigner(service.provider)
-            addLog('Provider acknowledged successfully', 'success')
-          }
-        } catch (ackError) {
-          addLog(`Provider acknowledgment warning: ${ackError}`, 'info')
-        }
-        
-        // Get service metadata with fallback
-        try {
-          const metadata = await broker.inference.getServiceMetadata(service.provider)
-          addLog(`Service endpoint: ${metadata.endpoint}`, 'info')
-          addLog(`Model: ${metadata.model}`, 'info')
-          setCurrentService({ ...service, ...metadata })
-        } catch (metaError) {
-          addLog(`Using basic service info (metadata unavailable)`, 'info')
-          // Set fallback values
-          setCurrentService({
-            ...service,
-            endpoint: service.endpoint || 'https://api.openai.com/v1',
-            model: service.model || 'gpt-3.5-turbo'
-          })
-        }
-      } else {
-        addLog('No services available. Please check network connection.', 'error')
+      // Debug the original service structure (handle BigInt serialization)
+      addLog(`Original service structure: ${JSON.stringify(serviceArray, (key, value) =>
+        typeof value === 'bigint' ? value.toString() : value, 2)}`, 'info')
+      
+      // Convert array to object structure
+      const service = {
+        provider: serviceArray[0],
+        serviceType: serviceArray[1], 
+        url: serviceArray[2],
+        fee1: serviceArray[3],
+        fee2: serviceArray[4],
+        timestamp: serviceArray[5],
+        model: serviceArray[6],
+        verifiability: serviceArray[7],
+        signature: serviceArray[8]
       }
-    } catch (error) {
-      addLog(`Service discovery failed: ${error}`, 'error')
-      addLog('This might be due to network issues or service unavailability', 'info')
+      
+      setCurrentService(service)
+      addLog(`Selected service provider: ${service.provider}`, 'info')
+      addLog(`Service URL: ${service.url}`, 'info')
+      addLog(`Model: ${service.model}`, 'info')
+      addLog(`Verifiability: ${service.verifiability || 'None'}`, 'info')
+      
+      // Acknowledge provider (required before use)
+      addLog('Acknowledging provider...', 'info')
+      await broker.inference.acknowledgeProviderSigner(service.provider)
+      addLog('Provider acknowledged successfully', 'success')
+      
+      // Get service details (endpoint URL and AI model name)
+      try {
+        const { endpoint, model } = await broker.inference.getServiceMetadata(service.provider)
+        addLog(`Service endpoint: ${endpoint}`, 'info')
+        addLog(`Model from metadata: ${model}`, 'info')
+        
+        // Update service with metadata
+        setCurrentService({ 
+          ...service,
+          endpoint, 
+          model 
+        })
+      } catch (metaError) {
+        addLog(`Using basic service info (metadata unavailable)`, 'info')
+        // Use service.url as fallback endpoint
+        setCurrentService({
+          ...service,
+          endpoint: service.url,
+          model: service.model
+        })
+      }
+    } else {
+      addLog('No services available. Please check network connection.', 'error')
     }
+  } catch (error) {
+    addLog(`Service discovery failed: ${error}`, 'error')
+    addLog('This might be due to network issues or service unavailability', 'info')
+  }
+}
+
+// using fetch
+const runInference = async () => {
+  if (!broker || !currentService || !currentService.endpoint) {
+    addLog('Broker or service not ready', 'error')
+    return
   }
 
-  const runInference = async () => {
-    if (!broker || !currentService || !currentService.endpoint) {
-      addLog('Broker or service not ready', 'error')
+  setIsLoading(true)
+  setResponse('')
+  
+  try {
+    const question = "Tell me a short joke about programming."
+    const systemPrompt = "You are a helpful assistant with a sense of humor."
+    
+    addLog('Preparing inference request...', 'info')
+    
+    // Build the conversation messages
+    const messages: any[] = []
+    
+    // Add system instructions
+    if (systemPrompt) {
+      messages.push({ role: "system", content: systemPrompt })
+    }
+    
+    // Add the user's message
+    messages.push({ role: "user", content: question })
+
+    addLog(`current service is ${currentService}`, 'info')
+    addLog('Getting endpoint and model...', 'info')
+    const endpoint = currentService.endpoint
+    const model = currentService.model
+
+    addLog(`Using endpoint: ${endpoint}`, 'info')
+    addLog(`Using model: ${model}`, 'info')
+    
+    // Enhanced debugging
+    addLog(`Provider type: ${typeof currentService?.provider}`, 'info')
+    addLog(`Provider exists: ${!!currentService?.provider}`, 'info')
+    addLog(`Provider value: ${currentService?.provider}`, 'info')
+    addLog(`Endpoint: ${currentService?.endpoint}`, 'info')
+    
+    // Add safety check for provider
+    if (!currentService.provider) {
+      addLog('Error: Service provider is undefined', 'error')
       return
     }
-
-    setIsLoading(true)
-    setResponse('')
     
-    try {
-      const message = "Tell me a short joke about programming."
-      const systemPrompt = "You are a helpful assistant with a sense of humor."
-      
-      addLog('Preparing inference request...', 'info')
-      
-      // Fix: Use the correct OpenAI message type
-      const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: message }
-      ]
-      
-      // Get request headers
-      const headers = await broker.inference.getRequestHeaders(currentService.provider, message)
-      addLog('Got authentication headers', 'success')
-      
-      // Create OpenAI client
-      const openai = new OpenAI({
-        baseURL: currentService.endpoint,
-        apiKey: "",
-        defaultHeaders: { ...headers } as Record<string, string>,
-        dangerouslyAllowBrowser: true
-      })
-      
-      addLog('Making inference request...', 'info')
-      
-      const completion = await openai.chat.completions.create({
-        messages,
-        model: currentService.model || 'gpt-3.5-turbo',
-      })
-      
-      const aiResponse = completion.choices[0]?.message?.content || 'No response'
-      setResponse(aiResponse)
-      addLog('Inference completed successfully!', 'success')
-      
-      // Show final balances
-      try {
-        const finalLedger = await broker.ledger.getLedger()
-        addLog(`Updated ledger balance: ${finalLedger.totalBalance || finalLedger}`, 'info')
-      } catch (balanceError) {
-        addLog('Could not get updated balance', 'info')
-      }
-      
-    } catch (error) {
-      addLog(`Inference failed: ${error}`, 'error')
-    } finally {
-      setIsLoading(false)
+    // Generate auth headers 
+    const providerAddress = currentService.provider?.toString?.() || currentService.provider
+    
+    if (!providerAddress) {
+      addLog('Error: Could not get provider address', 'error')
+      return
     }
+    
+    addLog(`Using provider address: ${providerAddress}`, 'info')
+    const headers = await broker.inference.getRequestHeaders(providerAddress, question)
+    addLog('Got authentication headers', 'success')
+    addLog(`Raw headers: ${JSON.stringify(headers)}`, 'info')
+    
+    addLog('Making inference request...', 'info')
+    
+    // Ensure model is defined
+    if (!model) {
+      throw new Error('Model is required for inference request')
+    }
+    
+    // Use direct fetch to match exactly what Node.js does
+    const requestBody = {
+      messages: messages,
+      model: model,
+    }
+    
+    addLog(`Request body: ${JSON.stringify(requestBody)}`, 'info')
+    
+    // Make direct fetch request with exact headers
+    const response = await fetch(`${endpoint}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...headers,
+      },
+      body: JSON.stringify(requestBody),
+    })
+    
+    if (!response.ok) {
+      console.log(`Error: ${response.status}`);
+      console.log('Response details:', response);
+      const errorText = await response.text()
+      throw new Error(`${response.status} "${errorText}"`)
+    }
+    
+    const completion = await response.json()
+    console.log("OpenAI Response:", completion)
+
+    // Extract answer
+    const aiResponse = completion.choices[0].message.content!;
+    setResponse(aiResponse)
+    addLog('Inference completed successfully!', 'success')
+    
+    // Show usage info if available
+    if (completion.usage) {
+      addLog(`Tokens used: ${completion.usage.total_tokens}`, 'info')
+    }
+    
+    // Show final balances using official API
+    try {
+      const finalLedger = await broker.ledger.getLedger()
+      const balance = Number(ethers.formatEther(finalLedger.balance || finalLedger.totalBalance || finalLedger))
+      const locked = finalLedger.locked ? Number(ethers.formatEther(finalLedger.locked)) : 0
+      const available = balance - locked
+      addLog(`Updated balance: ${balance.toFixed(6)} OG, Available: ${available.toFixed(6)} OG`, 'info')
+    } catch (balanceError) {
+      addLog('Could not get updated balance', 'info')
+    }
+    
+  } catch (error) {
+    addLog(`Inference failed: ${error}`, 'error')
+  } finally {
+    setIsLoading(false)
   }
+}
+
 
   return (
     <div className="space-y-6">
@@ -217,7 +381,7 @@ export function InferenceClient() {
               <strong>Connected:</strong> {address}
               {currentService && (
                 <div className="text-sm mt-1">
-                  Service: {currentService.provider.slice(0, 10)}...{currentService.provider.slice(-8)}
+                  Service: {currentService.provider?.slice(0, 10)}...{currentService.provider?.slice(-8)}
                 </div>
               )}
             </div>
@@ -271,7 +435,7 @@ export function InferenceClient() {
         <div>
           <h3 className="text-lg font-semibold mb-2">Logs:</h3>
           <div className="bg-gray-50 border border-gray-300 rounded p-4 h-64 overflow-y-auto font-mono text-sm">
-            {logs.map((log, index) => (
+            {logs.map((log: LogEntry, index: number) => (
               <div
                 key={index}
                 className={`mb-1 ${
