@@ -7,7 +7,7 @@ import { createZGComputeNetworkBroker } from '@0glabs/0g-serving-broker'
 import { BrowserProvider, ethers } from 'ethers'
 import OpenAI from 'openai'
 import { LogEntry, InferenceService } from '@/types'
-import { Wallet, Brain, Trash2, Loader2 } from 'lucide-react'
+import { Wallet, Brain, Trash2, Loader2, Send } from 'lucide-react'
 
 // Use any type for the actual broker since we don't have exact types
 type ActualZGBroker = any
@@ -23,6 +23,8 @@ export function InferenceClient() {
   const [broker, setBroker] = useState<ActualZGBroker | null>(null)
   const [services, setServices] = useState<InferenceService[]>([])
   const [currentService, setCurrentService] = useState<InferenceService | null>(null)
+  const [userMessage, setUserMessage] = useState<string>('')
+  const [systemPrompt, setSystemPrompt] = useState<string>('You are a knowledgeable AI assistant powered by 0G Labs decentralized compute network. You provide helpful, accurate, and detailed responses while being friendly and professional. Feel free to explain complex topics in simple terms when needed.')
 
   const addLog = (message: string, type: LogEntry['type'] = 'info') => {
     const timestamp = new Date().toLocaleTimeString()
@@ -239,10 +241,15 @@ const discoverServices = async (broker: ActualZGBroker) => {
   }
 }
 
-// using fetch
+// Modified runInference to use user input
 const runInference = async () => {
   if (!broker || !currentService || !currentService.endpoint) {
     addLog('Broker or service not ready', 'error')
+    return
+  }
+
+  if (!userMessage.trim()) {
+    addLog('Please enter a message before running inference', 'error')
     return
   }
 
@@ -250,17 +257,17 @@ const runInference = async () => {
   setResponse('')
   
   try {
-    const question = "Tell me a short joke about programming."
-    const systemPrompt = "You are a helpful assistant with a sense of humor."
+    const question = userMessage.trim()
     
     addLog('Preparing inference request...', 'info')
+    addLog(`User message: ${question}`, 'info')
     
     // Build the conversation messages
     const messages: any[] = []
     
     // Add system instructions
-    if (systemPrompt) {
-      messages.push({ role: "system", content: systemPrompt })
+    if (systemPrompt.trim()) {
+      messages.push({ role: "system", content: systemPrompt.trim() })
     }
     
     // Add the user's message
@@ -362,6 +369,13 @@ const runInference = async () => {
   }
 }
 
+const handleSubmit = (e: React.FormEvent) => {
+  e.preventDefault()
+  if (!isLoading && userMessage.trim()) {
+    runInference()
+  }
+}
+
 
   return (
     <div className="space-y-6">
@@ -395,28 +409,67 @@ const runInference = async () => {
         )}
       </div>
 
-      {/* Controls */}
+      {/* Chat Interface */}
       {isConnected && (
-        <div className="flex gap-4">
-          <button
-            onClick={runInference}
-            disabled={isLoading || !currentService}
-            className="bg-green-500 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-2 px-4 rounded flex items-center gap-2"
-          >
-            {isLoading ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Brain className="w-4 h-4" />
-            )}
-            {isLoading ? 'Running...' : 'Run AI Inference'}
-          </button>
-          <button
-            onClick={clearLogs}
-            className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2"
-          >
-            <Trash2 className="w-4 h-4" />
-            Clear Logs
-          </button>
+        <div className="space-y-4">
+          {/* System Prompt */}
+          <div>
+            <label htmlFor="systemPrompt" className="block text-sm font-medium text-gray-700 mb-2">
+              System Prompt (Optional):
+            </label>
+            <textarea
+              id="systemPrompt"
+              value={systemPrompt}
+              onChange={(e) => setSystemPrompt(e.target.value)}
+              placeholder="Enter system instructions for the AI..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              rows={2}
+            />
+          </div>
+
+          {/* Message Input Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="userMessage" className="block text-sm font-medium text-gray-700 mb-2">
+                Your Message:
+              </label>
+              <div className="flex gap-2">
+                <textarea
+                  id="userMessage"
+                  value={userMessage}
+                  onChange={(e) => setUserMessage(e.target.value)}
+                  placeholder="Type your message here..."
+                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  rows={3}
+                  disabled={isLoading}
+                />
+              </div>
+            </div>
+            
+            {/* Submit Button */}
+            <div className="flex gap-4">
+              <button
+                type="submit"
+                disabled={isLoading || !currentService || !userMessage.trim()}
+                className="bg-green-500 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-2 px-4 rounded flex items-center gap-2"
+              >
+                {isLoading ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Send className="w-4 h-4" />
+                )}
+                {isLoading ? 'Running...' : 'Send Message'}
+              </button>
+              <button
+                type="button"
+                onClick={clearLogs}
+                className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Clear Logs
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
@@ -424,7 +477,7 @@ const runInference = async () => {
       {response && (
         <div>
           <h3 className="text-lg font-semibold mb-2">AI Response:</h3>
-          <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded">
+          <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded whitespace-pre-wrap">
             {response}
           </div>
         </div>
