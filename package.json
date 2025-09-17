@@ -5,15 +5,15 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "build:vercel": "npm run cleanup:vercel && next build",
+    "cleanup:vercel": "node scripts/cleanup-for-vercel.js",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "compile": "hardhat compile",
     "deploy": "hardhat run scripts/deploy.js --network 0g-testnet",
     "test": "hardhat test",
-    "node": "hardhat node",
-    "vercel-build": "node scripts/cleanup-for-vercel.js && next build",
-    "prepare-deploy": "node scripts/cleanup-for-vercel.js"
+    "node": "hardhat node"
   },
   "dependencies": {
     "@0glabs/0g-serving-broker": "^0.3.3",
@@ -26,7 +26,7 @@
     "class-variance-authority": "^0.7.0",
     "clsx": "^2.1.0",
     "crypto-js": "4.2.0",
-    "ethers": "^6.15.0",
+    "ethers": "6.13.1",
     "ipfs-http-client": "^60.0.0",
     "lucide-react": "^0.363.0",
     "next": "14.1.4",

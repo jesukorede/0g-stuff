@@ -4,29 +4,29 @@ async function main() {
   const [deployer] = await ethers.getSigners();
   console.log("Deploying contracts with account:", deployer.address);
 
-  // Deploy mock oracle for testing (replace with real oracle in production)
+  // Deploy MockOracle with initial owner (required by constructor)
   const MockOracle = await ethers.getContractFactory("MockOracle");
-  const mockOracle = await MockOracle.deploy(deployer.address);
-  const oracle = await MockOracle.deploy();
-  await oracle.deployed();
-  console.log("Oracle deployed to:", oracle.address);
+  const oracle = await MockOracle.deploy(deployer.address);
+  await oracle.waitForDeployment();
+  const oracleAddress = await oracle.getAddress();
+  console.log("Oracle deployed to:", oracleAddress);
 
-  // Deploy INFT contract
+  // Deploy INFT with name, symbol, initialOwner, oracleAddress
   const INFT = await ethers.getContractFactory("INFT");
   const inft = await INFT.deploy(
     "AI Agent NFTs",
     "AINFT",
-    oracle.address
+    deployer.address,
+    oracleAddress
   );
-  await inft.deployed();
-  console.log("INFT deployed to:", inft.address);
+  await inft.waitForDeployment();
+  const inftAddress = await inft.getAddress();
+  console.log("INFT deployed to:", inftAddress);
 
-  // Update contract addresses in the frontend constants
-  console.log("Update the following addresses in your frontend constants:");
-  console.log(`INFT_CONTRACT_ADDRESS: "${inft.address}"`);
-  console.log(`ORACLE_CONTRACT_ADDRESS: "${oracle.address}"`);
-  
-  // You can add code here to automatically update your frontend constants if needed
+  // Output env-ready lines for frontend
+  console.log("\nAdd these to your .env.local:\n");
+  console.log(`NEXT_PUBLIC_INFT_ADDRESS=${inftAddress}`);
+  console.log(`NEXT_PUBLIC_ORACLE_ADDRESS=${oracleAddress}`);
 }
 
 main()

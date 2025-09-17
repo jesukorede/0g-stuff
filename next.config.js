@@ -20,9 +20,14 @@ const nextConfig = {
         stream: false,
         util: false
       }
+      // Stub out optional server-only deps pulled by transitive packages
+      config.resolve.alias = {
+        ...(config.resolve.alias || {}),
+        'pino-pretty': false
+      }
     }
     return config
   }
 }
 
-export default nextConfig
+module.exports = nextConfig

@@ -1,7 +1,6 @@
 import { ethers, Contract, ContractTransactionResponse, JsonRpcProvider, Signer } from 'ethers';
 import { MetadataManager } from './MetadataManager';
-import { INFT_ABI } from '@/contracts/abis/INFT.json';
-import { ORACLE_ABI } from '@/contracts/abis/Oracle.json';
+import { INFT_ABI_ETHERS as INFT_ABI, ORACLE_ABI_ETHERS as ORACLE_ABI } from '@/types/inft/abi';
 
 type TypedContract<T> = Contract & T;
 

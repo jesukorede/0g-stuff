@@ -8,7 +8,7 @@ module.exports = {
     hardhat: {},
     "0g-testnet": {
       url: process.env.NEXT_PUBLIC_0G_RPC_URL || "https://evmrpc-testnet.0g.ai",
-      chainId: parseInt(process.env.NEXT_PUBLIC_0G_CHAIN_ID || "16600"),
+      chainId: parseInt(process.env.NEXT_PUBLIC_0G_CHAIN_ID || "16601"),
       accounts: process.env.DEPLOYER_PRIVATE_KEY ? [process.env.DEPLOYER_PRIVATE_KEY] : [],
       gasPrice: 1000000000, // 1 gwei
     },

@@ -60,6 +60,9 @@ export default function AIChatInterface() {
   const [showWalletLogs, setShowWalletLogs] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  // Check if we're in demo mode (no contracts deployed)
+  const isDemoMode = !process.env.NEXT_PUBLIC_INFT_ADDRESS || !process.env.NEXT_PUBLIC_ORACLE_ADDRESS
+
   // Proper hydration check
   useEffect(() => {
     setMounted(true)
@@ -673,6 +676,11 @@ export default function AIChatInterface() {
                     <RefreshCw className="w-4 h-4" />
                     <span>Retry 0G Connection</span>
                   </button>
+                ) : isDemoMode ? (
+                  <div className="text-gray-400">
+                    <p className="mb-2">Demo mode: No contracts deployed.</p>
+                    <p className="mb-2">Please deploy contracts to use the 0G AI Chat.</p>
+                  </div>
                 ) : null}
               </div>
             </div>
@@ -694,12 +702,12 @@ export default function AIChatInterface() {
                     !isInitialized ? "Connecting to 0G Network..." :
                     "Type your message..."
                   }
-                  disabled={!isConnected || !isInitialized || isLoading}
+                  disabled={!isConnected || !isInitialized || isLoading || isDemoMode}
                   className="w-full p-4 pr-12 bg-gray-800 border border-gray-600 rounded-xl focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                 />
                 <button
                   onClick={sendMessage}
-                  disabled={!message.trim() || !isConnected || !isInitialized || isLoading}
+                  disabled={!message.trim() || !isConnected || !isInitialized || isLoading || isDemoMode}
                   className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-600 hover:to-yellow-700 disabled:from-gray-600 disabled:to-gray-700 rounded-lg transition-all duration-200 disabled:cursor-not-allowed"
                 >
                   {isLoading ? (

@@ -1,5 +1,5 @@
-import { defaultWagmiConfig } from '@web3modal/wagmi/react/config'
 import { createWeb3Modal } from '@web3modal/wagmi/react'
+import { defaultWagmiConfig } from '@web3modal/wagmi'
 import { http } from 'wagmi'
 import { defineChain } from 'viem'
 
@@ -10,9 +10,13 @@ if (!projectId) {
   throw new Error('NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is required. Get your project ID from https://cloud.walletconnect.com')
 }
 
-// Define 0G Galileo Testnet (using correct chain ID)
+// Load RPC and Chain ID from env with sane defaults
+const RPC_URL = process.env.NEXT_PUBLIC_0G_RPC_URL || 'https://evmrpc-testnet.0g.ai'
+const CHAIN_ID = Number(process.env.NEXT_PUBLIC_0G_CHAIN_ID || 16601)
+
+// Define 0G Galileo Testnet using env-configurable values
 export const zgGalileoTestnet = defineChain({
-  id: 16601, // Fixed: using consistent chain ID
+  id: CHAIN_ID,
   name: '0G Galileo Testnet',
   nativeCurrency: {
     decimals: 18,
@@ -21,7 +25,7 @@ export const zgGalileoTestnet = defineChain({
   },
   rpcUrls: {
     default: {
-      http: ['https://evmrpc-testnet.0g.ai'],
+      http: [RPC_URL],
     },
   },
   blockExplorers: {
@@ -47,7 +51,7 @@ export const config = defaultWagmiConfig({
   projectId,
   metadata,
   transports: {
-    [zgGalileoTestnet.id]: http()
+    [zgGalileoTestnet.id]: http(RPC_URL)
   },
   enableWalletConnect: true,
   enableInjected: true,
