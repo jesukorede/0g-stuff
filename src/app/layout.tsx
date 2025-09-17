@@ -1,13 +1,10 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
 import './globals.css'
-import { Providers } from '@/components/providers'
-
-const inter = Inter({ subsets: ['latin'] })
+import { Providers } from './providers'
 
 export const metadata: Metadata = {
-  title: '0G Labs Inference Client',
-  description: 'Decentralized AI Inference with Multiple Wallet Support',
+  title: '0G Labs AI Inference',
+  description: 'Decentralized AI inference powered by 0G Network',
 }
 
 export default function RootLayout({
@@ -17,7 +14,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className="font-sans">
         <Providers>
           {children}
         </Providers>

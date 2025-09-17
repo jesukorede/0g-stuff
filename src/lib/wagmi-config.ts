@@ -2,10 +2,12 @@ import { defaultWagmiConfig } from '@web3modal/wagmi/react/config'
 import { cookieStorage, createStorage } from 'wagmi'
 import { mainnet, sepolia, polygon, arbitrum, base, optimism } from 'wagmi/chains'
 
-// Get projectId from https://cloud.walletconnect.com
-export const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID || 'your-project-id'
+// Get projectId from environment - REQUIRED for production
+export const projectId = process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID
 
-if (!projectId) throw new Error('Project ID is not defined')
+if (!projectId) {
+  throw new Error('NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID is required. Get your project ID from https://cloud.walletconnect.com')
+}
 
 // Define 0G testnet chain
 const zgTestnet = {
@@ -33,11 +35,11 @@ const zgTestnet = {
 const metadata = {
   name: '0G Labs Inference Client',
   description: 'Decentralized AI Inference with Multiple Wallet Support',
-  url: 'https://0g-inference.vercel.app',
+  url: process.env.NODE_ENV === 'production' ? 'https://your-domain.com' : 'http://localhost:3000',
   icons: ['https://avatars.githubusercontent.com/u/37784886']
 }
 
-// Create wagmiConfig
+// Create wagmiConfig for production
 const chains = [zgTestnet, mainnet, sepolia, polygon, arbitrum, base, optimism] as const
 export const config = defaultWagmiConfig({
   chains,

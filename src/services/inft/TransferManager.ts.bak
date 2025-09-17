@@ -1,0 +1,139 @@
+import { ethers, Contract, ContractTransactionResponse } from 'ethers';
+import { MetadataManager } from './MetadataManager';
+import { INFT_ABI, ORACLE_ABI } from '../../types/inft/abi';
+
+// Use the ABI types directly instead of custom interfaces
+interface INFTInterface extends Contract {
+  getEncryptedMetadataKey(tokenId: number): Promise<string>;
+  tokenURI(tokenId: number): Promise<string>;
+  transferFrom(from: string, to: string, tokenId: number): Promise<ContractTransactionResponse>;
+  updateMetadata(tokenId: number, tokenURI: string, encryptedMetadataKey: string): Promise<ContractTransactionResponse>;
+  grantAuthorization(tokenId: number, user: string): Promise<ContractTransactionResponse>;
+  revokeAuthorization(tokenId: number, user: string): Promise<ContractTransactionResponse>;
+  isAuthorized(tokenId: number, user: string): Promise<boolean>;
+  connect(signer: ethers.Signer): INFTInterface;
+}
+
+interface IOracleInterface extends Contract {
+  authorizeRequest(requester: string, tokenId: number, timestamp: number): Promise<ContractTransactionResponse>;
+  connect(signer: ethers.Signer): IOracleInterface;
+}
+
+export class TransferManager {
+  private provider: ethers.JsonRpcProvider;
+  private inftContract: INFTInterface;
+  private oracleContract: IOracleInterface;
+  private metadataManager: MetadataManager;
+
+  constructor(
+    provider: ethers.JsonRpcProvider,
+    inftContractAddress: string,
+    oracleContractAddress: string,
+    metadataManager: MetadataManager
+  ) {
+    this.provider = provider;
+    this.inftContract = new ethers.Contract(
+      inftContractAddress, 
+      INFT_ABI, 
+      provider
+    ) as unknown as IINFT;
+    this.oracleContract = new ethers.Contract(
+      oracleContractAddress, 
+      ORACLE_ABI, 
+      provider
+    ) as unknown as IOracle;
+    this.metadataManager = metadataManager;
+  }
+
+  /**
+   * Transfers an INFT to a new owner with secure metadata transfer
+   */
+  public async transferINFT(
+    signer: ethers.Signer,
+    tokenId: number,
+    fromAddress: string,
+    toAddress: string,
+    recipientPublicKey: string
+  ): Promise<ethers.TransactionResponse> {
+    // Connect contracts with signer
+    const inftWithSigner = this.inftContract.connect(signer);
+    
+    // Get the current encrypted metadata key
+    const encryptedMetadataKey = await inftWithSigner.getEncryptedMetadataKey(tokenId);
+    
+    // Get the token URI
+    const tokenURI = await inftWithSigner.tokenURI(tokenId);
+    
+    // Re-encrypt the metadata key for the new owner
+    const newEncryptedMetadataKey = this.metadataManager.encryptMetadataKeyForRecipient(recipientPublicKey);
+    
+    // Transfer the token
+    const tx = await inftWithSigner.transferFrom(fromAddress, toAddress, tokenId);
+    
+    // Wait for the transaction to be mined
+    await tx.wait();
+    
+    // Update the metadata key for the new owner
+    await inftWithSigner.updateMetadata(tokenId, tokenURI, newEncryptedMetadataKey);
+    
+    return tx;
+  }
+
+  /**
+   * Authorizes a user to access an INFT
+   */
+  public async authorizeUser(
+    signer: ethers.Signer,
+    tokenId: number,
+    userAddress: string
+  ): Promise<ethers.TransactionResponse> {
+    const inftWithSigner = this.inftContract.connect(signer);
+    return inftWithSigner.grantAuthorization(tokenId, userAddress);
+  }
+
+  /**
+   * Revokes authorization from a user
+   */
+  public async revokeAuthorization(
+    signer: ethers.Signer,
+    tokenId: number,
+    userAddress: string
+  ): Promise<ethers.TransactionResponse> {
+    const inftWithSigner = this.inftContract.connect(signer);
+    return inftWithSigner.revokeAuthorization(tokenId, userAddress);
+  }
+
+  /**
+   * Checks if a user is authorized to access an INFT
+   */
+  public async isAuthorized(tokenId: number, userAddress: string): Promise<boolean> {
+    return this.inftContract.isAuthorized(tokenId, userAddress);
+  }
+
+  /**
+   * Requests authorization from the oracle for inference
+   */
+  public async requestInferenceAuthorization(
+    signer: ethers.Signer,
+    tokenId: number,
+    requesterAddress: string
+  ): Promise<string> {
+    const oracleWithSigner = this.oracleContract.connect(signer);
+    const timestamp = Math.floor(Date.now() / 1000);
+    
+    const tx = await oracleWithSigner.authorizeRequest(requesterAddress, tokenId, timestamp);
+    const receipt = await tx.wait();
+    
+    // Extract the requestId from the event logs
+    const event = receipt.logs.find(
+      (log: any) => log.topics[0] === ethers.id("RequestAuthorized(bytes32,address,uint256)")
+    );
+    
+    if (!event) {
+      throw new Error("Failed to find RequestAuthorized event");
+    }
+    
+    const requestId = event.topics[1];
+    return requestId;
+  }
+}

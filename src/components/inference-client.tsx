@@ -84,19 +84,84 @@ export function InferenceClient() {
         addLog(`Signer address: ${await signer.getAddress()}`, 'info')
         addLog(`Signer provider chain ID: ${(await signer.provider.getNetwork()).chainId}`, 'info')
         
-        const newBroker = await createZGComputeNetworkBroker(signer) as ActualZGBroker
+        // Step 1: Initialize broker
+        const newBroker = await createZGComputeNetworkBroker(signer)
+        
+        // Step 2: Setup ledger
+        await setupLedger(newBroker)
+        
+        // Step 3: Discover services
+        await discoverServices(newBroker)
         setBroker(newBroker)
         addLog('Broker initialized successfully', 'success')
         
         // Setup ledger
-        await setupLedger(newBroker)
         addLog('Ledger setup completed', 'success')
         
         // Discover services 
-        await discoverServices(newBroker)
+        addLog('Discovering AI services...', 'info')
+        const availableServices = await broker.inference.listService()
+        setServices(availableServices)
+        addLog(`Found ${availableServices.length} available services`, 'success')
         
+        if (availableServices.length > 0) {
+          const serviceArray = availableServices[0]
+          
+          // Debug the original service structure (handle BigInt serialization)
+          addLog(`Original service structure: ${JSON.stringify(serviceArray, (key, value) =>
+            typeof value === 'bigint' ? value.toString() : value, 2)}`, 'info')
+          
+          // Convert array to object structure
+          const service = {
+            provider: serviceArray[0],
+            serviceType: serviceArray[1], 
+            url: serviceArray[2],
+            fee1: serviceArray[3],
+            fee2: serviceArray[4],
+            timestamp: serviceArray[5],
+            model: serviceArray[6],
+            verifiability: serviceArray[7],
+            signature: serviceArray[8]
+          }
+          
+          setCurrentService(service)
+          addLog(`Selected service provider: ${service.provider}`, 'info')
+          addLog(`Service URL: ${service.url}`, 'info')
+          addLog(`Model: ${service.model}`, 'info')
+          addLog(`Verifiability: ${service.verifiability || 'None'}`, 'info')
+          
+          // Acknowledge provider (required before use)
+          addLog('Acknowledging provider...', 'info')
+          await broker.inference.acknowledgeProviderSigner(service.provider)
+          addLog('Provider acknowledged successfully', 'success')
+          
+          // Get service details (endpoint URL and AI model name)
+          try {
+            const { endpoint, model } = await broker.inference.getServiceMetadata(service.provider)
+            addLog(`Service endpoint: ${endpoint}`, 'info')
+            addLog(`Model from metadata: ${model}`, 'info')
+            
+            // Update service with metadata
+            setCurrentService({ 
+              ...service,
+              endpoint, 
+              model 
+            })
+          } catch (metaError) {
+            addLog(`Using basic service info (metadata unavailable)`, 'info')
+            // Use service.url as fallback endpoint
+            setCurrentService({
+              ...service,
+              endpoint: service.url,
+              model: service.model
+            })
+          }
+        } else {
+          addLog('No services available. Please check network connection.', 'error')
+        }
       } catch (error) {
-        addLog(`Failed to initialize broker: ${error}`, 'error')
+        addLog(`Service discovery failed: ${error}`, 'error')
+        addLog('This might be due to network issues or service unavailability', 'info')
       }
     }
 
